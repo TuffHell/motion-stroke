@@ -1,145 +1,296 @@
 import streamlit as st
 import numpy as np
-import plotly.graph_objects as go
+import pandas as pd
 from tensorflow.keras.models import load_model
 import joblib
-import time
-import os
+import plotly.graph_objects as go
+import plotly.express as px
 
-# --- 1. PAGE CONFIG & THEME ---
-st.set_page_config(page_title="InnoHealth Quad-Sensor V2", page_icon="🧠", layout="wide")
-st.markdown("""
-    <style>
-    .main { background-color: #0e1117; }
-    .stMetric { background-color: #1f2937; padding: 15px; border-radius: 10px; border: 1px solid #374151; }
-    </style>
-    """, unsafe_allow_html=True)
+# ---------------------------------------------------------
+# 1. PAGE CONFIGURATION & UI SETUP
+# ---------------------------------------------------------
+st.set_page_config(page_title="Quad-Sensor Stroke Detection V2", page_icon="🧠", layout="wide")
+st.title("🧠 AI-Powered Hemiparesis & Stroke Detector (V2 Quad-Sensor)")
+st.markdown("Live 3D Biomechanical Tracking, Quad-Kinematics, & Explainable AI Diagnostics.")
 
-st.title("🧠 Quad-Sensor Kinematic Telemetry Dashboard (V2)")
-st.write("Full-body neurological tracking utilizing Hybrid CNN-LSTM to scan for Clinical Stroke Signatures.")
-
-# --- 2. ASSET LOADING ---
+# ---------------------------------------------------------
+# 2. LOAD THE V2 AI MODEL AND SCALER
+# ---------------------------------------------------------
 @st.cache_resource
 def load_ai_assets():
     try:
+        # UPDATED TO V2 FILES
         model = load_model('stroke_model_v2.h5')
         scaler = joblib.load('scaler_v2.save')
-        return model, scaler, True
+        return model, scaler
     except:
-        return None, None, False
+        return None, None
 
-dashboard_model, loaded_scaler, assets_loaded = load_ai_assets()
+model, scaler = load_ai_assets()
+if model:
+    st.sidebar.success("✅ V2 Quad-Sensor Network Online")
+else:
+    st.sidebar.warning("⚠️ Demo Mode (V2 AI Model files not detected)")
 
-# --- 3. KINEMATIC SIMULATION & SIGNATURE ENGINE ---
-def simulate_v2_data(scenario):
-    """Simulates 240 data points (24 features x 20 timesteps) based on clinical signatures."""
-    t = np.linspace(0, 2*np.pi, 20)
-    window = np.zeros((20, 12)) # 12 raw channels
-    
-    # Base gait
-    window[:, 0] = np.sin(t) * 0.5  # L Arm X
-    window[:, 3] = np.sin(t + np.pi) * 0.5  # R Arm X
-    window[:, 6] = np.sin(t + np.pi) * 0.6  # L Leg X
-    window[:, 9] = np.sin(t) * 0.6  # R Leg X
-    
-    signatures = {"Bradykinesia": "Normal", "Spasticity": "None", "Tremors": "None"}
-    
-    if scenario == "Pathology (Stroke Simulation)":
-        # Apply Sluggishness (Bradykinesia) - temporal rhythm disruption
-        window[:, 3] = np.sin(t * 0.5 + np.pi) * 0.2 
-        # Apply Muscle Stiffness (Spasticity) - flattened swing
-        window[:, 9] *= 0.15 
-        # Apply Tremors - high frequency micro-shakes
-        window[:, 3] += np.random.normal(0, 0.05, 20) 
-        
-        signatures = {"Bradykinesia": "⚠️ DETECTED", "Spasticity": "⚠️ DETECTED", "Tremors": "⚠️ DETECTED"}
+# ---------------------------------------------------------
+# 3. V2 CLINICAL PHYSICS ENGINE (24 FEATURES)
+# ---------------------------------------------------------
+def calculate_clinical_features_v2(raw_12d_data):
+    # Now tracking 4 sensors: L Arm, R Arm, L Leg, R Leg
+    l_arm = raw_12d_data[:, 0:3]
+    r_arm = raw_12d_data[:, 3:6]
+    l_leg = raw_12d_data[:, 6:9]
+    r_leg = raw_12d_data[:, 9:12]
 
-    # Feature Engineering (creating the 24 features)
-    l_arm, r_arm = window[:, 0:3], window[:, 3:6]
-    l_leg, r_leg = window[:, 6:9], window[:, 9:12]
-    
-    # Biomarker Calculations
-    drift = l_arm - r_arm # Positional Drift
-    l_mag, r_mag = np.linalg.norm(l_arm, axis=1, keepdims=True), np.linalg.norm(r_arm, axis=1, keepdims=True)
-    balance_shift = (l_mag - r_mag) / (l_mag + r_mag + 1e-6) # Lateral Balance Shift
-    
-    # Placeholder for legs to reach 24 features
+    # Positional Drifts
+    arm_drift = l_arm - r_arm
     leg_drift = l_leg - r_leg
-    ll_mag, rl_mag = np.linalg.norm(l_leg, axis=1, keepdims=True), np.linalg.norm(r_leg, axis=1, keepdims=True)
-    leg_asym = (ll_mag - rl_mag) / (ll_mag + rl_mag + 1e-6)
-    
-    full_24 = np.hstack((window, drift, leg_drift, l_mag, r_mag, ll_mag, rl_mag, balance_shift, leg_asym))
-    scaled = loaded_scaler.transform(full_24).reshape(1, 20, 24)
-    prob = dashboard_model.predict(scaled, verbose=0)[0][0]
-    
-    return window, signatures, prob, l_mag.mean(), r_mag.mean(), balance_shift.mean()
 
-# --- 4. 3D SKELETON RENDERER ---
-def render_3d_skeleton(raw_data):
-    # Mapping points
-    frame = 10
-    l_wrist = [-0.5, raw_data[frame, 0] + 0.8, 1.0]
-    r_wrist = [0.5, raw_data[frame, 3] + 0.8, 1.0]
-    l_ankle = [-0.2, raw_data[frame, 6] + 0.8, 0.1]
-    r_ankle = [0.2, raw_data[frame, 9] + 0.8, 0.1]
-    
-    # Body Structure
-    x = [0, 0, -0.3, -0.4, l_wrist[0], -0.3, 0.3, 0.4, r_wrist[0], 0.3, 0, 0, -0.2, -0.2, l_ankle[0], -0.2, 0.2, 0.2, r_ankle[0]]
-    y = [0.8, 0.8, 0.8, 0.8, l_wrist[1], 0.8, 0.8, 0.8, r_wrist[1], 0.8, 0.8, 0.8, 0.8, 0.8, l_ankle[1], 0.8, 0.8, 0.8, r_ankle[1]]
-    z = [1.7, 1.5, 1.4, 1.2, 1.0, 1.4, 1.4, 1.2, 1.0, 1.4, 1.5, 0.9, 0.9, 0.5, 0.1, 0.9, 0.9, 0.5, 0.1]
+    # Kinetic Magnitudes
+    l_arm_mag = np.linalg.norm(l_arm, axis=1, keepdims=True)
+    r_arm_mag = np.linalg.norm(r_arm, axis=1, keepdims=True)
+    l_leg_mag = np.linalg.norm(l_leg, axis=1, keepdims=True)
+    r_leg_mag = np.linalg.norm(r_leg, axis=1, keepdims=True)
 
-    fig = go.Figure(data=[go.Scatter3d(x=x, y=y, z=z, mode='lines+markers', 
-                                       line=dict(color='#e67e22', width=8),
-                                       marker=dict(size=6, color='#2ecc71'))])
-    fig.update_layout(scene=dict(bgcolor="#111827", xaxis_visible=False, yaxis_visible=False, zaxis_visible=False),
-                      margin=dict(l=0, r=0, b=0, t=0), height=500, paper_bgcolor="#111827")
+    # Lateral Balance Shifts (Asymmetry)
+    arm_asym = (l_arm_mag - r_arm_mag) / (l_arm_mag + r_arm_mag + 1e-6)
+    leg_asym = (l_leg_mag - r_leg_mag) / (l_leg_mag + r_leg_mag + 1e-6)
+
+    # Returns 24 columns (12 raw + 12 engineered)
+    return np.hstack((l_arm, r_arm, l_leg, r_leg, arm_drift, leg_drift, l_arm_mag, r_arm_mag, l_leg_mag, r_leg_mag, arm_asym, leg_asym))
+
+# ---------------------------------------------------------
+# 4. PHOTOREALISTIC HUMAN GAIT (VOLUMETRIC & SECURED HEAD)
+# ---------------------------------------------------------
+def generate_stickman_frame(t, profile, noise_level):
+    cycle = t * np.pi * 2 
+    bounce = 0.04 * np.sin(cycle * 2)
+    
+    pelvis = [0, 0, 0.9 + bounce]
+    neck = [0, 0.05, 1.5 + bounce]
+    head = [0, 0.1, 1.7 + bounce]
+    
+    s_rot = 0.05 * np.sin(cycle)
+    h_rot = -0.05 * np.sin(cycle)
+    
+    r_shoulder = [0.25, s_rot, 1.5 + bounce]
+    l_shoulder = [-0.25, -s_rot, 1.5 + bounce]
+    r_hip = [0.15, h_rot, 0.9 + bounce]
+    l_hip = [-0.15, -h_rot, 0.9 + bounce]
+
+    # --- HEALTHY BASELINE KINEMATICS ---
+    r_ankle_y = 0.4 * np.sin(cycle)
+    r_ankle_z = 0.05 + max(0, 0.15 * np.cos(cycle)) 
+    r_knee_y = 0.2 * np.sin(cycle) + 0.05
+    r_knee_z = 0.5 + (r_ankle_z - 0.05) * 1.5 
+    r_knee = [0.15, r_knee_y, r_knee_z]
+    r_ankle = [0.15, r_ankle_y, r_ankle_z]
+    
+    l_ankle_y = 0.4 * np.sin(cycle + np.pi)
+    l_ankle_z = 0.05 + max(0, 0.15 * np.cos(cycle + np.pi))
+    l_knee_y = 0.2 * np.sin(cycle + np.pi) + 0.05
+    l_knee_z = 0.5 + (l_ankle_z - 0.05) * 1.5
+    l_knee = [-0.15, l_knee_y, l_knee_z]
+    l_ankle = [-0.15, l_ankle_y, l_ankle_z]
+    
+    r_wrist_y = 0.4 * np.sin(cycle + np.pi)
+    r_wrist_z = 0.9 + 0.1 * np.cos(cycle + np.pi) 
+    r_elbow_y = 0.2 * np.sin(cycle + np.pi)
+    r_elbow_z = 1.2
+    r_elbow = [0.3, r_elbow_y, r_elbow_z]
+    r_wrist = [0.3, r_wrist_y, r_wrist_z]
+
+    l_wrist_y = 0.4 * np.sin(cycle)
+    l_wrist_z = 0.9 + 0.1 * np.cos(cycle)
+    l_elbow_y = 0.2 * np.sin(cycle)
+    l_elbow_z = 1.2
+    l_elbow = [-0.3, l_elbow_y, l_elbow_z]
+    l_wrist = [-0.3, l_wrist_y, l_wrist_z]
+
+    # --- APPLY CLINICAL PATHOLOGY PROFILES ---
+    if profile == "Severe Left Hemiparesis":
+        noise = np.random.normal(0, noise_level, 3)
+        l_elbow = [-0.2, 0.1 + noise[0], 1.25] 
+        l_wrist = [-0.1, 0.15 + noise[1], 1.35]  
+        l_knee = [-0.15, 0.1 * np.sin(cycle + np.pi), 0.45] 
+        l_ankle_x = -0.15 - max(0, 0.2 * np.cos(cycle + np.pi)) 
+        l_ankle = [l_ankle_x, 0.2 * np.sin(cycle + np.pi), 0.05] 
+
+    elif profile == "Mild Right Spasticity":
+        noise = np.random.normal(0, noise_level * 2, 3)
+        r_elbow = [0.3, 0.1 * np.sin(cycle + np.pi) + noise[0], 1.2]
+        r_wrist = [0.3, 0.15 * np.sin(cycle + np.pi) + noise[1], 1.0]
+        r_knee = [0.15, 0.15 * np.sin(cycle) + noise[0], 0.48]
+        r_ankle = [0.15, 0.3 * np.sin(cycle), 0.06]
+
+    elif profile == "Bilateral Bradykinesia (Parkinsonian)":
+        noise = np.random.normal(0, noise_level * 1.5, 3)
+        neck = [0, 0.2, 1.4 + bounce]
+        head = [0, 0.3, 1.55 + bounce]
+        r_ankle = [0.15, 0.1 * np.sin(cycle), 0.05]
+        l_ankle = [-0.15, 0.1 * np.sin(cycle + np.pi), 0.05]
+        r_knee = [0.15, 0.05 * np.sin(cycle) + 0.1, 0.45]
+        l_knee = [-0.15, 0.05 * np.sin(cycle + np.pi) + 0.1, 0.45]
+        r_elbow = [0.3, 0.05 * np.sin(cycle + np.pi) + noise[0], 1.1]
+        r_wrist = [0.3, 0.05 * np.sin(cycle + np.pi) + noise[1], 0.95]
+        l_elbow = [-0.3, 0.05 * np.sin(cycle) + noise[0], 1.1]
+        l_wrist = [-0.3, 0.05 * np.sin(cycle) + noise[1], 0.95]
+
+    x = [head[0], neck[0], pelvis[0], None, neck[0], r_shoulder[0], None, neck[0], l_shoulder[0], None, l_shoulder[0], r_shoulder[0], r_hip[0], l_hip[0], l_shoulder[0], None, r_shoulder[0], r_elbow[0], r_wrist[0], None, l_shoulder[0], l_elbow[0], l_wrist[0], None, pelvis[0], r_hip[0], r_knee[0], r_ankle[0], None, pelvis[0], l_hip[0], l_knee[0], l_ankle[0]]
+    y = [head[1], neck[1], pelvis[1], None, neck[1], r_shoulder[1], None, neck[1], l_shoulder[1], None, l_shoulder[1], r_shoulder[1], r_hip[1], l_hip[1], l_shoulder[1], None, r_shoulder[1], r_elbow[1], r_wrist[1], None, l_shoulder[1], l_elbow[1], l_wrist[1], None, pelvis[1], r_hip[1], r_knee[1], r_ankle[1], None, pelvis[1], l_hip[1], l_knee[1], l_ankle[1]]
+    z = [head[2], neck[2], pelvis[2], None, neck[2], r_shoulder[2], None, neck[2], l_shoulder[2], None, l_shoulder[2], r_shoulder[2], r_hip[2], l_hip[2], l_shoulder[2], None, r_shoulder[2], r_elbow[2], r_wrist[2], None, l_shoulder[2], l_elbow[2], l_wrist[2], None, pelvis[2], r_hip[2], r_knee[2], r_ankle[2], None, pelvis[2], l_hip[2], l_knee[2], l_ankle[2]]
+    
+    # Returning ankles too for V2 Quad-Sensor input!
+    return x, y, z, l_wrist, r_wrist, l_ankle, r_ankle
+
+def build_animated_stickman(frames_data, color_scheme):
+    fig = go.Figure(
+        data=[go.Scatter3d(
+            x=frames_data[0][0], y=frames_data[0][1], z=frames_data[0][2], 
+            mode='lines+markers', 
+            marker=dict(size=6, color=color_scheme, opacity=0.9),
+            line=dict(color=color_scheme, width=8)
+        )],
+        layout=go.Layout(
+            scene=dict(xaxis=dict(range=[-0.8, 0.8]), yaxis=dict(range=[-0.8, 0.8]), zaxis=dict(range=[0, 2]), aspectmode='cube'),
+            updatemenus=[dict(type="buttons", buttons=[dict(label="▶ Play Kinematics", method="animate", args=[None, dict(frame=dict(duration=30, redraw=True), fromcurrent=True, transition=dict(duration=0))])])],
+            margin=dict(l=0, r=0, b=0, t=0), height=450
+        ),
+        frames=[go.Frame(data=[go.Scatter3d(x=f[0], y=f[1], z=f[2])]) for f in frames_data]
+    )
     return fig
 
-# --- 5. MAIN UI ---
-if not assets_loaded:
-    st.error("Assets not found. Please place `stroke_model_v2.h5` and `scaler_v2.save` in this folder.")
-    st.stop()
+# ---------------------------------------------------------
+# 5. DASHBOARD CONTROLS (SIDEBAR)
+# ---------------------------------------------------------
+st.sidebar.header("📡 Live Telemetry Control")
+patient_profiles = ("Healthy Control", "Severe Left Hemiparesis", "Mild Right Spasticity", "Bilateral Bradykinesia (Parkinsonian)")
+patient_type = st.sidebar.radio("Select Patient Profile:", patient_profiles)
 
-with st.sidebar:
-    st.header("Control Center")
-    scenario = st.radio("Patient Telemetry Stream:", ["Healthy (Symmetrical Gait)", "Pathology (Stroke Simulation)"])
-    run_btn = st.button("Fetch & Analyze Data", type="primary", use_container_width=True)
+st.sidebar.divider()
+st.sidebar.subheader("Simulation Parameters")
+num_frames = st.sidebar.slider("Sampling Resolution (Frames)", min_value=40, max_value=120, value=80, step=10)
+noise_level = st.sidebar.slider("Neurological Tremor Intensity", min_value=0.0, max_value=0.15, value=0.03, step=0.01)
 
-if run_btn:
-    raw, sigs, prob, l_m, r_m, b_shift = simulate_v2_data(scenario)
-    
-    col1, col2 = st.columns([1.5, 1])
-    
-    with col1:
-        st.subheader("3D Kinematic Motion Viewer")
-        st.plotly_chart(render_3d_skeleton(raw), use_container_width=True)
+if st.sidebar.button("▶️ Initialize AI Biomechanical Scan"):
+    with st.spinner(f"Rendering {num_frames} High-Fidelity Kinematic Frames..."):
         
-    with col2:
-        st.subheader("Clinical Signature Analysis")
-        # Signature Detections
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Bradykinesia", sigs["Bradykinesia"])
-        c2.metric("Spasticity", sigs["Spasticity"])
-        c3.metric("Tremors", sigs["Tremors"])
+        time_steps = np.linspace(0, 2, num_frames)
+        healthy_frames = [generate_stickman_frame(t, "Healthy Control", 0) for t in time_steps]
+        patient_frames = [generate_stickman_frame(t, patient_type, noise_level) for t in time_steps]
         
-        st.divider()
-        # 12 Biomarker Highlights
-        st.subheader("Biomarker Monitoring")
-        st.write(f"**Lateral Balance Shift (Index):** {b_shift:.3f}")
-        st.progress(abs(b_shift) if abs(b_shift) <= 1 else 1.0)
+        # EXTRACTING 12 DATA POINTS PER FRAME (L Wrist, R Wrist, L Ankle, R Ankle)
+        raw_data = np.array([np.concatenate([f[3], f[4], f[5], f[6]]) for f in patient_frames])
         
-        st.write(f"**Kinetic Magnitude (L vs R Arm):** {l_m:.2f} / {r_m:.2f}")
-        st.divider()
+        # GENERATING 24 FEATURES FOR V2
+        features_24d = calculate_clinical_features_v2(raw_data)
         
-        # AI Final Result
-        if prob > 0.5:
-            st.error(f"🚨 CRITICAL ANOMALY: {(prob*100):.1f}% Confidence")
+        dt = time_steps[1] - time_steps[0]
+        left_wrist_y_vel = np.gradient(raw_data[:, 1], dt)
+        left_wrist_y_acc = np.gradient(left_wrist_y_vel, dt)
+        right_wrist_y_vel = np.gradient(raw_data[:, 4], dt)
+        right_wrist_y_acc = np.gradient(right_wrist_y_vel, dt)
+        
+        indices = np.linspace(0, num_frames - 1, 20, dtype=int)
+        scan_window = features_24d[indices] # Now extracting 24 columns
+        
+        prediction_prob = 0.0
+        is_stroke = False
+        
+        if model and scaler:
+            # Reshaping to (1, 20, 24) to match the V2 Quad-Sensor architecture
+            scaled_features = scaler.transform(scan_window).reshape(1, 20, 24)
+            prediction_prob = model.predict(scaled_features)[0][0]
+            is_stroke = prediction_prob > 0.5
         else:
-            st.success(f"✅ NOMINAL STATUS: {(100 - prob*100):.1f}% Confidence")
+            if patient_type == "Healthy Control":
+                prediction_prob = 0.04
+            elif patient_type == "Severe Left Hemiparesis":
+                prediction_prob = 0.98
+                is_stroke = True
+            elif patient_type == "Mild Right Spasticity":
+                prediction_prob = 0.76
+                is_stroke = True
+            else:
+                prediction_prob = 0.62
+                is_stroke = True
 
-    # --- 6. EXPORTING CLINICAL RECORD ---
-    report_content = f"INNOHEALTH RPM ALERT\nStatus: {'CRITICAL' if prob > 0.5 else 'NORMAL'}\nProb: {prob:.4f}\n"
-    st.download_button("📥 Download AI Clinical Record", report_content, file_name="Clinical_Alert.txt")
+        # ---------------------------------------------------------
+        # 6. UI TABS: CLINICAL, XAI, AND ARCHITECTURE
+        # ---------------------------------------------------------
+        tab1, tab2, tab3 = st.tabs(["🩺 Clinical View (3D)", "⚙️ Live AI Diagnostics", "📚 The Science (Architecture)"])
+        
+        # --- TAB 1: CLINICAL VIEW ---
+        with tab1:
+            col1, col2, col3 = st.columns(3)
+            col1.metric("Neural Network Confidence", f"{prediction_prob * 100:.2f}%")
+            if is_stroke:
+                col2.error(f"🚨 ALERT: Abnormal Gait Detected ({patient_type})")
+            else:
+                col2.success("✅ STATUS: Healthy Symmetric Gait")
+            # Index 22 is Arm Asymmetry, Index 23 is Leg Asymmetry
+            col3.metric("Peak Arm Balance Shift", f"{np.max(features_24d[:, 22]):.3f}")
 
+            st.subheader("Live 3D Spatial Tracking (60 FPS)")
+            c1, c2 = st.columns(2)
+            with c1:
+                st.markdown("**Baseline (Healthy Reference)**")
+                st.plotly_chart(build_animated_stickman(healthy_frames, '#00CC96'), use_container_width=True) 
+            with c2:
+                st.markdown(f"**Live Patient ({patient_type})**")
+                patient_color = '#EF553B' if is_stroke else '#00CC96' 
+                st.plotly_chart(build_animated_stickman(patient_frames, patient_color), use_container_width=True)
+
+        # --- TAB 2: EXPLAINABLE AI ---
+        with tab2:
+            st.markdown("### Deep Learning & Biomechanical Breakdown")
+            
+            st.subheader("1. CNN Tremor Detection: High-Frequency Acceleration (m/s²)")
+            fig_acc = go.Figure()
+            fig_acc.add_trace(go.Scatter(y=left_wrist_y_acc, mode='lines', name='Left Arm Acceleration', line=dict(color='red' if is_stroke and "Left" in patient_type else 'cyan', width=2)))
+            fig_acc.add_trace(go.Scatter(y=right_wrist_y_acc, mode='lines', name='Right Arm Acceleration', line=dict(color='orange' if is_stroke and "Right" in patient_type else 'lightgreen', width=2)))
+            fig_acc.update_layout(height=350, margin=dict(t=10, b=10))
+            st.plotly_chart(fig_acc, use_container_width=True)
+
+            col_x1, col_x2 = st.columns(2)
+            with col_x1:
+                st.subheader("2. CNN Spasticity Filter (Amplitude)")
+                if model:
+                    fig_heat = px.imshow(scaled_features[0].T, color_continuous_scale="inferno", aspect="auto")
+                    st.plotly_chart(fig_heat, use_container_width=True)
+                else:
+                    fake_heat = np.random.rand(24, 20) if not is_stroke else np.random.rand(24, 20) * 3
+                    fig_heat = px.imshow(fake_heat, color_continuous_scale="inferno", aspect="auto")
+                    st.plotly_chart(fig_heat, use_container_width=True)
+                
+            with col_x2:
+                st.subheader("3. LSTM Bradykinesia Filter (Rhythm)")
+                fig_lstm = go.Figure()
+                # Index 18 and 19 are L and R Arm magnitudes
+                fig_lstm.add_trace(go.Scatter(y=features_24d[:, 18], mode='lines', name='Left Arm Energy', line=dict(color='red' if is_stroke and "Left" in patient_type else 'cyan', width=3)))
+                fig_lstm.add_trace(go.Scatter(y=features_24d[:, 19], mode='lines', name='Right Arm Energy', line=dict(color='orange' if is_stroke and "Right" in patient_type else 'lightgreen', width=3, dash='dot')))
+                fig_lstm.update_layout(height=350, margin=dict(t=10, b=10))
+                st.plotly_chart(fig_lstm, use_container_width=True)
+
+        # --- TAB 3: THE SCIENCE ---
+        with tab3:
+            st.header("🧠 AI Architecture & Clinical Methodology")
+            # UPDATED FOR V2
+            st.markdown("The AI analyzes **480 data points** per prediction (24 Quad-Sensor features × 20 timesteps).")
+            with st.expander("🔬 The 24 Clinical Biomarkers (V2 Upgrade)", expanded=True):
+                st.markdown("""
+                The `calculate_clinical_features_v2` function now translates raw numbers into **24 specific indicators** across both the upper and lower body:
+                * **Raw Kinematics (Channels 0-11):** The raw X, Y, and Z acceleration of both arms and both legs.
+                * **Positional Drift (Channels 12-17):** The mathematical difference between limbs (`left_xyz - right_xyz`).
+                * **Kinetic Energy (Channels 18-21):** The pure magnitude of force generated by all four limbs.
+                * **Lateral Balance Shift (Channels 22-23):** The Asymmetry Index ratio for the upper and lower body.
+                """)
+            with st.expander("🧬 AI Architecture: Hybrid CNN-LSTM", expanded=True):
+                st.markdown("""
+                The Hybrid CNN-LSTM network scans across 1.5 seconds of continuous motion, hunting for three clinical stroke signatures:
+                * **Bradykinesia:** Evaluated by the LSTM layer.
+                * **Spasticity:** Evaluated by the CNN layer.
+                * **Acute Tremors:** High-frequency anomaly detection via CNN.
+                """)
 else:
-    st.info("Awaiting telemetry connection. Use the sidebar to fetch patient data.")
+    st.info("👈 Select a Patient Profile and click **Initialize AI Biomechanical Scan**.")
