@@ -48,9 +48,10 @@ def calculate_clinical_features_v2(raw_12d_data):
     return np.hstack((l_arm, r_arm, l_leg, r_leg, arm_drift, leg_drift, l_arm_m, r_arm_m, l_leg_m, r_leg_m, arm_asym, leg_asym))
 
 # ---------------------------------------------------------
-# 4. ASYMMETRY VISUALIZATION FUNCTION
+# 4. ASYMMETRY VISUALIZATION FUNCTION (UPGRADED)
 # ---------------------------------------------------------
-def render_asymmetry_analysis(features_24d):
+def render_asymmetry_analysis(features_24d, patient_frames):
+    # 1. Bar Chart Logic (Kinetic Energy)
     avg_l_arm = np.mean(features_24d[:, 18])
     avg_r_arm = np.mean(features_24d[:, 19])
     avg_l_leg = np.mean(features_24d[:, 20])
@@ -59,11 +60,32 @@ def render_asymmetry_analysis(features_24d):
     arm_si = ((avg_l_arm - avg_r_arm) / (0.5 * (avg_l_arm + avg_r_arm) + 1e-6)) * 100
     leg_si = ((avg_l_leg - avg_r_leg) / (0.5 * (avg_l_leg + avg_r_leg) + 1e-6)) * 100
 
-    fig = go.Figure()
-    fig.add_trace(go.Bar(name='Left Side', x=['Arm Energy', 'Leg Energy'], y=[avg_l_arm, avg_l_leg], marker_color='#00CC96'))
-    fig.add_trace(go.Bar(name='Right Side', x=['Arm Energy', 'Leg Energy'], y=[avg_r_arm, avg_r_leg], marker_color='#EF553B'))
-    fig.update_layout(barmode='group', height=400, title="Kinetic Energy Distribution (Left vs Right)")
-    return fig, arm_si, leg_si
+    fig_bar = go.Figure()
+    fig_bar.add_trace(go.Bar(name='Left Side', x=['Arm Energy', 'Leg Energy'], y=[avg_l_arm, avg_l_leg], marker_color='#00CC96'))
+    fig_bar.add_trace(go.Bar(name='Right Side', x=['Arm Energy', 'Leg Energy'], y=[avg_r_arm, avg_r_leg], marker_color='#EF553B'))
+    fig_bar.update_layout(barmode='group', height=400, title="Kinetic Energy Breakdown")
+
+    # 2. NEW: 3D Trajectory "Ghost Trace" Map
+    l_w_x, l_w_y, l_w_z = [f[3][0] for f in patient_frames], [f[3][1] for f in patient_frames], [f[3][2] for f in patient_frames]
+    r_w_x, r_w_y, r_w_z = [f[4][0] for f in patient_frames], [f[4][1] for f in patient_frames], [f[4][2] for f in patient_frames]
+    l_a_x, l_a_y, l_a_z = [f[5][0] for f in patient_frames], [f[5][1] for f in patient_frames], [f[5][2] for f in patient_frames]
+    r_a_x, r_a_y, r_a_z = [f[6][0] for f in patient_frames], [f[6][1] for f in patient_frames], [f[6][2] for f in patient_frames]
+
+    fig_traj = go.Figure()
+    # Wrists (Dashed lines)
+    fig_traj.add_trace(go.Scatter3d(x=l_w_x, y=l_w_y, z=l_w_z, mode='lines', name='Left Arm Path', line=dict(color='#00CC96', width=4, dash='dash')))
+    fig_traj.add_trace(go.Scatter3d(x=r_w_x, y=r_w_y, z=r_w_z, mode='lines', name='Right Arm Path', line=dict(color='#EF553B', width=4, dash='dash')))
+    # Ankles (Solid thick lines)
+    fig_traj.add_trace(go.Scatter3d(x=l_a_x, y=l_a_y, z=l_a_z, mode='lines', name='Left Leg Path', line=dict(color='#00CC96', width=8)))
+    fig_traj.add_trace(go.Scatter3d(x=r_a_x, y=r_a_y, z=r_a_z, mode='lines', name='Right Leg Path', line=dict(color='#EF553B', width=8)))
+
+    fig_traj.update_layout(
+        title="3D Limb Trajectories (Volume Asymmetry)",
+        scene=dict(xaxis=dict(range=[-0.5, 0.5]), yaxis=dict(range=[-0.5, 0.5]), zaxis=dict(range=[0, 1.5]), aspectmode='cube'),
+        margin=dict(l=0, r=0, b=0, t=40), height=400
+    )
+
+    return fig_bar, fig_traj, arm_si, leg_si
 
 # ---------------------------------------------------------
 # 5. PHOTOREALISTIC HUMAN GAIT (ALL 4 PROFILES)
@@ -251,21 +273,33 @@ if st.sidebar.button("▶️ Initialize AI Biomechanical Scan"):
                 * **Acute Tremors:** High-frequency anomaly detection via CNN.
                 """)
 
-        # --- TAB 4: ASYMMETRY ANALYTICS ---
+       # --- TAB 4: ASYMMETRY ANALYTICS ---
         with tab4:
             st.header("⚖️ Quad-Sensor Symmetry Profiling")
             st.markdown("An SI of **0%** is perfect symmetry. Values exceeding **±10%** are clinically significant for neurological intervention.")
             
-            asym_fig, arm_si, leg_si = render_asymmetry_analysis(features_24d)
-            col_a, col_b = st.columns(2)
+            # Pass patient_frames into the function so it can map the 3D coordinates
+            asym_fig_bar, asym_fig_traj, arm_si, leg_si = render_asymmetry_analysis(features_24d, patient_frames)
+            
+            col_a, col_b = st.columns([1.5, 1]) # Make the left column a bit wider for the 3D map
             with col_a:
-                st.plotly_chart(asym_fig, use_container_width=True)
+                st.plotly_chart(asym_fig_traj, use_container_width=True)
+                st.plotly_chart(asym_fig_bar, use_container_width=True)
             with col_b:
+                st.subheader("Clinical Symmetry Index (SI)")
                 st.metric("Arm Symmetry Index", f"{arm_si:.1f}%", delta="Abnormal" if abs(arm_si) > 10 else "Normal", delta_color="inverse")
                 st.metric("Leg Symmetry Index", f"{leg_si:.1f}%", delta="Abnormal" if abs(leg_si) > 10 else "Normal", delta_color="inverse")
+                
+                st.divider()
+                st.markdown("### 🔍 AI Gait Interpretation")
                 if abs(arm_si) > 20:
-                    st.warning(f"**Insight:** Severe unilateral arm suppression detected on the {'Left' if arm_si < 0 else 'Right'} side.")
+                    st.warning(f"**Arm Deficit:** Severe unilateral arm suppression detected on the {'Left' if arm_si < 0 else 'Right'} side. Notice the restricted trajectory volume in the 3D map.")
+                else:
+                    st.success("**Arm Mechanics:** Normal symmetrical swinging motion.")
+                    
                 if abs(leg_si) > 20:
-                    st.warning(f"**Insight:** Significant paretic leg-drag identified in the kinematic stream.")
+                    st.warning(f"**Leg Deficit:** Significant paretic leg-drag identified. The {'Left' if leg_si < 0 else 'Right'} ankle trajectory lacks the necessary Z-axis clearance (stepping height).")
+                else:
+                    st.success("**Leg Mechanics:** Normal stride length and clearance.")
 else:
     st.info("👈 Select a Patient Profile and click **Initialize AI Biomechanical Scan**.")
