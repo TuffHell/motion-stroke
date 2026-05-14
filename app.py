@@ -106,7 +106,7 @@ with st.sidebar:
     run_btn = st.button("Fetch & Analyze Data", type="primary", use_container_width=True)
 
 if run_btn:
-    raw, sigs, prob, l_m, r_m, b_shift = simulate_and_predict(scenario) # helper calls simulate_v2_data
+    raw, sigs, prob, l_m, r_m, b_shift = simulate_v2_data(scenario)
     
     col1, col2 = st.columns([1.5, 1])
     
