@@ -189,7 +189,7 @@ if st.sidebar.button("▶️ Initialize AI Biomechanical Scan"):
         # ---------------------------------------------------------
         tab1, tab2, tab3, tab4 = st.tabs(["🩺 Clinical View (3D)", "⚙️ Live AI Diagnostics", "📚 The Science", "⚖️ Asymmetry Analytics"])
         
-        # --- TAB 1: CLINICAL VIEW ---
+       # --- TAB 1: CLINICAL VIEW ---
         with tab1:
             col1, col2, col3 = st.columns(3)
             col1.metric("Neural Network Confidence", f"{prediction_prob * 100:.2f}%")
@@ -201,11 +201,12 @@ if st.sidebar.button("▶️ Initialize AI Biomechanical Scan"):
             c1, c2 = st.columns(2)
             with c1:
                 st.markdown("**Baseline (Healthy Reference)**")
-                st.plotly_chart(build_animated_stickman(healthy_frames, '#00CC96'), use_container_width=True) 
+                # ADDED KEY HERE
+                st.plotly_chart(build_animated_stickman(healthy_frames, '#00CC96'), use_container_width=True, key="baseline_chart") 
             with c2:
                 st.markdown(f"**Live Patient ({patient_type})**")
-                st.plotly_chart(build_animated_stickman(patient_frames, '#EF553B' if is_stroke else '#00CC96'), use_container_width=True)
-
+                # ADDED KEY HERE
+                st.plotly_chart(build_animated_stickman(patient_frames, '#EF553B' if is_stroke else '#00CC96'), use_container_width=True, key="patient_chart")
         # --- TAB 2: EXPLAINABLE AI ---
         with tab2:
             st.markdown("### Deep Learning & Biomechanical Breakdown")
