@@ -26,10 +26,6 @@ def load_ai_assets():
         return None, None
 
 model, scaler = load_ai_assets()
-if model:
-    st.sidebar.success("✅ V2 Quad-Sensor Network Online")
-else:
-    st.sidebar.warning("⚠️ Demo Mode (V2 AI Model files not detected)")
 
 # ---------------------------------------------------------
 # 3. V2 CLINICAL PHYSICS ENGINE (24 FEATURES)
@@ -48,10 +44,10 @@ def calculate_clinical_features_v2(raw_12d_data):
     return np.hstack((l_arm, r_arm, l_leg, r_leg, arm_drift, leg_drift, l_arm_m, r_arm_m, l_leg_m, r_leg_m, arm_asym, leg_asym))
 
 # ---------------------------------------------------------
-# 4. ASYMMETRY VISUALIZATION FUNCTION (UPGRADED)
+# 4. ASYMMETRY VISUALIZATION FUNCTION (3D GHOST TRACES)
 # ---------------------------------------------------------
 def render_asymmetry_analysis(features_24d, patient_frames):
-    # 1. Bar Chart Logic (Kinetic Energy)
+    # Bar Chart Logic
     avg_l_arm = np.mean(features_24d[:, 18])
     avg_r_arm = np.mean(features_24d[:, 19])
     avg_l_leg = np.mean(features_24d[:, 20])
@@ -65,17 +61,15 @@ def render_asymmetry_analysis(features_24d, patient_frames):
     fig_bar.add_trace(go.Bar(name='Right Side', x=['Arm Energy', 'Leg Energy'], y=[avg_r_arm, avg_r_leg], marker_color='#EF553B'))
     fig_bar.update_layout(barmode='group', height=400, title="Kinetic Energy Breakdown")
 
-    # 2. NEW: 3D Trajectory "Ghost Trace" Map
+    # 3D Trajectory Map Logic
     l_w_x, l_w_y, l_w_z = [f[3][0] for f in patient_frames], [f[3][1] for f in patient_frames], [f[3][2] for f in patient_frames]
     r_w_x, r_w_y, r_w_z = [f[4][0] for f in patient_frames], [f[4][1] for f in patient_frames], [f[4][2] for f in patient_frames]
     l_a_x, l_a_y, l_a_z = [f[5][0] for f in patient_frames], [f[5][1] for f in patient_frames], [f[5][2] for f in patient_frames]
     r_a_x, r_a_y, r_a_z = [f[6][0] for f in patient_frames], [f[6][1] for f in patient_frames], [f[6][2] for f in patient_frames]
 
     fig_traj = go.Figure()
-    # Wrists (Dashed lines)
     fig_traj.add_trace(go.Scatter3d(x=l_w_x, y=l_w_y, z=l_w_z, mode='lines', name='Left Arm Path', line=dict(color='#00CC96', width=4, dash='dash')))
     fig_traj.add_trace(go.Scatter3d(x=r_w_x, y=r_w_y, z=r_w_z, mode='lines', name='Right Arm Path', line=dict(color='#EF553B', width=4, dash='dash')))
-    # Ankles (Solid thick lines)
     fig_traj.add_trace(go.Scatter3d(x=l_a_x, y=l_a_y, z=l_a_z, mode='lines', name='Left Leg Path', line=dict(color='#00CC96', width=8)))
     fig_traj.add_trace(go.Scatter3d(x=r_a_x, y=r_a_y, z=r_a_z, mode='lines', name='Right Leg Path', line=dict(color='#EF553B', width=8)))
 
@@ -211,7 +205,7 @@ if st.sidebar.button("▶️ Initialize AI Biomechanical Scan"):
         # ---------------------------------------------------------
         tab1, tab2, tab3, tab4 = st.tabs(["🩺 Clinical View (3D)", "⚙️ Live AI Diagnostics", "📚 The Science", "⚖️ Asymmetry Analytics"])
         
-       # --- TAB 1: CLINICAL VIEW ---
+        # --- TAB 1: CLINICAL VIEW ---
         with tab1:
             col1, col2, col3 = st.columns(3)
             col1.metric("Neural Network Confidence", f"{prediction_prob * 100:.2f}%")
@@ -223,12 +217,13 @@ if st.sidebar.button("▶️ Initialize AI Biomechanical Scan"):
             c1, c2 = st.columns(2)
             with c1:
                 st.markdown("**Baseline (Healthy Reference)**")
-                # ADDED KEY HERE
-                st.plotly_chart(build_animated_stickman(healthy_frames, '#00CC96'), use_container_width=True, key="baseline_chart") 
+                # Added 'key' to prevent Duplicate Element ID error
+                st.plotly_chart(build_animated_stickman(healthy_frames, '#00CC96'), use_container_width=True, key="baseline_stickman") 
             with c2:
                 st.markdown(f"**Live Patient ({patient_type})**")
-                # ADDED KEY HERE
-                st.plotly_chart(build_animated_stickman(patient_frames, '#EF553B' if is_stroke else '#00CC96'), use_container_width=True, key="patient_chart")
+                # Added 'key' to prevent Duplicate Element ID error
+                st.plotly_chart(build_animated_stickman(patient_frames, '#EF553B' if is_stroke else '#00CC96'), use_container_width=True, key="patient_stickman")
+
         # --- TAB 2: EXPLAINABLE AI ---
         with tab2:
             st.markdown("### Deep Learning & Biomechanical Breakdown")
@@ -273,15 +268,14 @@ if st.sidebar.button("▶️ Initialize AI Biomechanical Scan"):
                 * **Acute Tremors:** High-frequency anomaly detection via CNN.
                 """)
 
-       # --- TAB 4: ASYMMETRY ANALYTICS ---
+        # --- TAB 4: ASYMMETRY ANALYTICS ---
         with tab4:
             st.header("⚖️ Quad-Sensor Symmetry Profiling")
             st.markdown("An SI of **0%** is perfect symmetry. Values exceeding **±10%** are clinically significant for neurological intervention.")
             
-            # Pass patient_frames into the function so it can map the 3D coordinates
             asym_fig_bar, asym_fig_traj, arm_si, leg_si = render_asymmetry_analysis(features_24d, patient_frames)
             
-            col_a, col_b = st.columns([1.5, 1]) # Make the left column a bit wider for the 3D map
+            col_a, col_b = st.columns([1.5, 1]) 
             with col_a:
                 st.plotly_chart(asym_fig_traj, use_container_width=True)
                 st.plotly_chart(asym_fig_bar, use_container_width=True)
