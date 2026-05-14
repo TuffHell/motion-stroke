@@ -44,7 +44,7 @@ def calculate_clinical_features_v2(raw_12d_data):
     return np.hstack((l_arm, r_arm, l_leg, r_leg, arm_drift, leg_drift, l_arm_m, r_arm_m, l_leg_m, r_leg_m, arm_asym, leg_asym))
 
 # ---------------------------------------------------------
-# 4. ASYMMETRY VISUALIZATION (NEW: 3D MOVEMENT VOLUMES)
+# 4. ASYMMETRY VISUALIZATION (VOLUMETRIC POINT CLOUDS)
 # ---------------------------------------------------------
 def render_asymmetry_analysis(features_24d, patient_frames):
     # Bar Chart Logic
@@ -61,7 +61,7 @@ def render_asymmetry_analysis(features_24d, patient_frames):
     fig_bar.add_trace(go.Bar(name='Right Side', x=['Arm Energy', 'Leg Energy'], y=[avg_r_arm, avg_r_leg], marker_color='#EF553B'))
     fig_bar.update_layout(barmode='group', height=400, title="Kinetic Energy Breakdown")
 
-    # 3D VOLUME MESH LOGIC (Replaces lines and circles)
+    # VOLUMETRIC POINT CLOUD LOGIC (Fixes the blank Mesh3d bug)
     l_w_x, l_w_y, l_w_z = [f[3][0] for f in patient_frames], [f[3][1] for f in patient_frames], [f[3][2] for f in patient_frames]
     r_w_x, r_w_y, r_w_z = [f[4][0] for f in patient_frames], [f[4][1] for f in patient_frames], [f[4][2] for f in patient_frames]
     l_a_x, l_a_y, l_a_z = [f[5][0] for f in patient_frames], [f[5][1] for f in patient_frames], [f[5][2] for f in patient_frames]
@@ -69,17 +69,19 @@ def render_asymmetry_analysis(features_24d, patient_frames):
 
     fig_traj = go.Figure()
     
-    # Left Arm Volume (Green)
-    fig_traj.add_trace(go.Mesh3d(x=l_w_x, y=l_w_y, z=l_w_z, alphahull=0, opacity=0.3, color='#00CC96', name='Left Arm Volume'))
-    # Right Arm Volume (Orange)
-    fig_traj.add_trace(go.Mesh3d(x=r_w_x, y=r_w_y, z=r_w_z, alphahull=0, opacity=0.5, color='#EF553B', name='Right Arm Volume'))
-    # Left Leg Volume (Green)
-    fig_traj.add_trace(go.Mesh3d(x=l_a_x, y=l_a_y, z=l_a_z, alphahull=0, opacity=0.3, color='#00CC96', name='Left Leg Volume'))
-    # Right Leg Volume (Orange)
-    fig_traj.add_trace(go.Mesh3d(x=r_a_x, y=r_a_y, z=r_a_z, alphahull=0, opacity=0.5, color='#EF553B', name='Right Leg Volume'))
+    # We use 'markers' with a huge size and low opacity to create a "glowing volume cloud" effect
+    # This guarantees it renders even if the path is a perfectly flat 1D line.
+    vol_l = dict(size=22, color='#00CC96', opacity=0.25, line=dict(width=0))
+    vol_r = dict(size=22, color='#EF553B', opacity=0.25, line=dict(width=0))
+    
+    # The central line acts as the "bone", the markers act as the "flesh/volume"
+    fig_traj.add_trace(go.Scatter3d(x=l_w_x, y=l_w_y, z=l_w_z, mode='lines+markers', line=dict(color='#00CC96', width=4), marker=vol_l, name='Left Arm Volume'))
+    fig_traj.add_trace(go.Scatter3d(x=r_w_x, y=r_w_y, z=r_w_z, mode='lines+markers', line=dict(color='#EF553B', width=4), marker=vol_r, name='Right Arm Volume'))
+    fig_traj.add_trace(go.Scatter3d(x=l_a_x, y=l_a_y, z=l_a_z, mode='lines+markers', line=dict(color='#00CC96', width=4), marker=vol_l, name='Left Leg Volume'))
+    fig_traj.add_trace(go.Scatter3d(x=r_a_x, y=r_a_y, z=r_a_z, mode='lines+markers', line=dict(color='#EF553B', width=4), marker=vol_r, name='Right Leg Volume'))
 
     fig_traj.update_layout(
-        title="3D Spatial Movement Volumes (Larger shape = Healthier Movement)",
+        title="3D Spatial Movement Volumes (Point Clouds)",
         scene=dict(xaxis=dict(range=[-0.5, 0.5]), yaxis=dict(range=[-0.5, 0.5]), zaxis=dict(range=[0, 1.5]), aspectmode='cube'),
         margin=dict(l=0, r=0, b=0, t=40), height=400
     )
