@@ -186,13 +186,20 @@ if st.sidebar.button("▶️ Initialize AI Biomechanical Scan"):
         raw_data = np.array([np.concatenate([f[3], f[4], f[5], f[6]]) for f in patient_frames])
         features_24d = calculate_clinical_features_v2(raw_data)
         
-        # VELOCITY & ACCELERATION FOR TAB 2
+      # VELOCITY & ACCELERATION FOR TAB 2
         dt = time_steps[1] - time_steps[0]
+        
+        # Arm Acceleration (Y-Axis)
         left_wrist_y_vel = np.gradient(raw_data[:, 1], dt)
         left_wrist_y_acc = np.gradient(left_wrist_y_vel, dt)
         right_wrist_y_vel = np.gradient(raw_data[:, 4], dt)
         right_wrist_y_acc = np.gradient(right_wrist_y_vel, dt)
         
+        # Leg Acceleration (Y-Axis) - NEWLY ADDED
+        left_ankle_y_vel = np.gradient(raw_data[:, 7], dt)
+        left_ankle_y_acc = np.gradient(left_ankle_y_vel, dt)
+        right_ankle_y_vel = np.gradient(raw_data[:, 10], dt)
+        right_ankle_y_acc = np.gradient(right_ankle_y_vel, dt)
         # AI INFERENCE
         indices = np.linspace(0, num_frames - 1, 20, dtype=int)
         scan_window = features_24d[indices]
@@ -230,8 +237,23 @@ if st.sidebar.button("▶️ Initialize AI Biomechanical Scan"):
                 st.markdown(f"**Live Patient ({patient_type})**")
                 st.plotly_chart(build_animated_stickman(patient_frames, '#EF553B' if is_stroke else '#00CC96'), use_container_width=True, key="patient_stickman")
 
-        # --- TAB 2: EXPLAINABLE AI ---
+       # --- TAB 2: EXPLAINABLE AI ---
         with tab2:
+            st.markdown("### Deep Learning & Biomechanical Breakdown")
+            st.subheader("1. CNN Tremor Detection: Quad-Limb Acceleration (m/s²)")
+            
+            fig_acc = go.Figure()
+            # Arm Traces (Solid lines)
+            fig_acc.add_trace(go.Scatter(y=left_wrist_y_acc, mode='lines', name='Left Arm Accel', line=dict(color='red' if is_stroke and "Left" in patient_type else 'cyan', width=2)))
+            fig_acc.add_trace(go.Scatter(y=right_wrist_y_acc, mode='lines', name='Right Arm Accel', line=dict(color='orange' if is_stroke and "Right" in patient_type else 'lightgreen', width=2)))
+            
+            # Leg Traces (Dashed lines) - NEWLY ADDED
+            fig_acc.add_trace(go.Scatter(y=left_ankle_y_acc, mode='lines', name='Left Leg Accel', line=dict(color='darkred' if is_stroke and "Left" in patient_type else 'blue', width=2, dash='dot')))
+            fig_acc.add_trace(go.Scatter(y=right_ankle_y_acc, mode='lines', name='Right Leg Accel', line=dict(color='darkorange' if is_stroke and "Right" in patient_type else 'green', width=2, dash='dot')))
+            
+            fig_acc.update_layout(height=400, margin=dict(t=10, b=10), legend_title="Sensor Locations")
+            st.plotly_chart(fig_acc, use_container_width=True) # --- TAB 2: EXPLAINABLE AI ---
+       
             st.markdown("### Deep Learning & Biomechanical Breakdown")
             st.subheader("1. CNN Tremor Detection: High-Frequency Acceleration (m/s²)")
             fig_acc = go.Figure()
